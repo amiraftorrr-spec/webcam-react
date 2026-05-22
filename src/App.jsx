@@ -8,10 +8,11 @@ import {
 
 function App() {
   const webcamRef = useRef(null);
-
+  
+  // رفرنس‌های مدل‌ها
   const faceRef = useRef(null);
   const handRef = useRef(null);
-  const boxRef = useRef(null); // رفرنس برای مربع دور شخص
+  const boxRef = useRef(null); 
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -21,16 +22,21 @@ function App() {
   const [mouse, setMouse] = useState(false);
   const [sonic, setSonic] = useState(false); 
 
-  // استیت و رفرنس برای کلید روشن/خاموش مربع (Bounding Box)
   const [boxEnabled, setBoxEnabled] = useState(false);
   const boxEnabledRef = useRef(false);
 
   const runningRef = useRef(false);
-  const lastTimestampRef = useRef(0);
+  const processingRef = useRef(false); // جلوگیری از پردازش همزمان چند فریم
+
+  // کانفیگ وبکم برای پرفورمنس بالاتر (رزولوشن کمتر مساوی است با پردازش بسیار سریع‌تر)
+  const videoConstraints = {
+    width: 640,
+    height: 480,
+    facingMode: "user"
+  };
 
   useEffect(() => {
     init();
-
     return () => {
       runningRef.current = false;
     };
@@ -45,6 +51,7 @@ function App() {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+        delegate: "GPU", // روشن کردن شتاب‌دهنده گرافیکی
       },
       runningMode: "VIDEO",
       numFaces: 1,
@@ -54,6 +61,7 @@ function App() {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "GPU", // روشن کردن شتاب‌دهنده گرافیکی
       },
       runningMode: "VIDEO",
       numHands: 2,
@@ -64,7 +72,6 @@ function App() {
   };
 
   // ---------------- helpers ----------------
-
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
   const isMiddleFinger = (h) => {
@@ -73,7 +80,6 @@ function App() {
     const pinkyDown = h[20].y > h[18].y;
     const middleUp = h[12].y < h[10].y;
     const isMiddleHighest = h[12].y < h[8].y && h[12].y < h[16].y && h[12].y < h[20].y;
-
     return middleUp && indexDown && ringDown && pinkyDown && isMiddleHighest;
   };
 
@@ -81,32 +87,19 @@ function App() {
     const indexTip = hand[8];
     const mouthTop = faceLm[13];
     const mouthBottom = faceLm[14];
-
     const mouthCenter = {
       x: (mouthTop.x + mouthBottom.x) / 2,
       y: (mouthTop.y + mouthBottom.y) / 2,
     };
-
     return dist(indexTip, mouthCenter) < 0.05;
   };
 
   const isHandsWideOpen = (hands) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
-
-    const h1 = hands.landmarks[0];
-    const h2 = hands.landmarks[1];
-
-    const isOpen = (h) => {
-      const fingersUp =
-        h[8].y < h[6].y &&
-        h[12].y < h[10].y &&
-        h[16].y < h[14].y &&
-        h[20].y < h[18].y;
-
-      return fingersUp;
-    };
-
-    return isOpen(h1) && isOpen(h2);
+    const isOpen = (h) => (
+      h[8].y < h[6].y && h[12].y < h[10].y && h[16].y < h[14].y && h[20].y < h[18].y
+    );
+    return isOpen(hands.landmarks[0]) && isOpen(hands.landmarks[1]);
   };
 
   const isMouseGesture = (h) => {
@@ -114,42 +107,37 @@ function App() {
     const middleUp = h[12].y < h[10].y;
     const ringDown = h[16].y > h[14].y;
     const pinkyDown = h[20].y > h[18].y;
-
     return indexUp && middleUp && ringDown && pinkyDown;
   };
 
   const isHandsOnHead = (hands, faceLm) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
-
     const headTop = faceLm[10]; 
     const eyesLevel = faceLm[159]; 
-
     const h1 = hands.landmarks[0][9];
     const h2 = hands.landmarks[1][9];
-
     const isHighEnough = h1.y < eyesLevel.y && h2.y < eyesLevel.y;
     const isCloseToHead = dist(h1, headTop) < 0.3 && dist(h2, headTop) < 0.3;
-
     return isHighEnough && isCloseToHead;
   };
 
   // ---------------- loop ----------------
-
   const loop = () => {
     if (!runningRef.current) return;
+    
+    // جلوگیری از گیر کردن در پردازش قبلی
+    if (processingRef.current) {
+        requestAnimationFrame(loop);
+        return;
+    }
 
     const video = webcamRef.current?.video;
 
     if (video && video.readyState === 4) {
+      processingRef.current = true;
       const now = performance.now();
 
-      if (now <= lastTimestampRef.current) {
-        requestAnimationFrame(loop);
-        return;
-      }
-
-      lastTimestampRef.current = now;
-
+      // پردازش بسیار سریع‌تر بدون صف‌های سنگین
       const face = faceRef.current.detectForVideo(video, now);
       const hands = handRef.current.detectForVideo(video, now);
 
@@ -158,12 +146,11 @@ function App() {
       let showMouseNow = false;
       let showSonicNow = false;
 
-      // 👇 منطق تشخیص کادر دور شخص (ادغام صورت و دست‌ها)
+      // نمایش مربع تشخیص شخص (بدون رندر ریکت برای پرفورمنس بالاتر)
       if (boxEnabledRef.current && boxRef.current) {
         let minX = 1, minY = 1, maxX = 0, maxY = 0;
         let hasDetection = false;
 
-        // مختصات صورت
         if (face.faceLandmarks?.length > 0) {
           face.faceLandmarks[0].forEach(p => {
             if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -172,7 +159,6 @@ function App() {
           hasDetection = true;
         }
 
-        // مختصات دست‌ها
         if (hands.landmarks?.length > 0) {
           hands.landmarks.forEach(hand => {
             hand.forEach(p => {
@@ -184,13 +170,11 @@ function App() {
         }
 
         if (hasDetection) {
-          // اضافه کردن مقداری پدینگ (فاصله) دور شخص
           minX = Math.max(0, minX - 0.05);
           maxX = Math.min(1, maxX + 0.05);
-          minY = Math.max(0, minY - 0.1); // پدینگ بالای سر بیشتر
+          minY = Math.max(0, minY - 0.1); 
           maxY = Math.min(1, maxY + 0.05);
 
-          // چون دوربین Mirrored (آینه) است، جای راست و چپ برعکس محاسبه می‌شود
           const left = (1 - maxX) * 100;
           const top = minY * 100;
           const width = (maxX - minX) * 100;
@@ -208,12 +192,14 @@ function App() {
         boxRef.current.style.display = "none";
       }
 
-      // ---------------- FACE ----------------
+      // ---------------- بررسی ژست‌ها ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
 
-        const mouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
-        setMouthOpen(mouthOpen);
+        const isMouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
+        
+        // فقط اگر واقعا تغییر کرده آپدیت کن تا رندر الکی نگیریم
+        setMouthOpen((prev) => prev !== isMouthOpen ? isMouthOpen : prev);
 
         if (hands.landmarks?.length > 0) {
           const h1 = hands.landmarks[0];
@@ -221,25 +207,23 @@ function App() {
           if (isMiddleFinger(h1)) {
             setCameraOff(true);
             runningRef.current = false; 
+            processingRef.current = false;
             return; 
           }
 
-          if (isHandsOnHead(hands, lm)) {
-            showSonicNow = true;      
-          } else if (isHandsWideOpen(hands)) {
-            showEmojiNow = true;      
-          } else if (isIndexInMouth(h1, lm)) {
-            showRonaldoNow = true;    
-          } else if (isMouseGesture(h1)) {
-            showMouseNow = true;      
-          }
+          if (isHandsOnHead(hands, lm)) showSonicNow = true;      
+          else if (isHandsWideOpen(hands)) showEmojiNow = true;      
+          else if (isIndexInMouth(h1, lm)) showRonaldoNow = true;    
+          else if (isMouseGesture(h1)) showMouseNow = true;      
         }
       }
 
-      setSonic(showSonicNow);
-      setEmoji(showEmojiNow);
-      setRonaldo(showRonaldoNow);
-      setMouse(showMouseNow);
+      setSonic(prev => prev !== showSonicNow ? showSonicNow : prev);
+      setEmoji(prev => prev !== showEmojiNow ? showEmojiNow : prev);
+      setRonaldo(prev => prev !== showRonaldoNow ? showRonaldoNow : prev);
+      setMouse(prev => prev !== showMouseNow ? showMouseNow : prev);
+      
+      processingRef.current = false;
     }
 
     requestAnimationFrame(loop);
@@ -257,13 +241,12 @@ function App() {
     boxEnabledRef.current = newState;
   };
 
-  // استایل کاملاً ریسپانسیو برای تصاویر (سایز متغیر با clamp)
   const imageStyle = {
     position: "absolute", 
     bottom: "5%", 
     right: "5%", 
     zIndex: 50,
-    width: "clamp(100px, 15vw, 180px)",   // در موبایل 100px، در دسکتاپ تا 180px بزرگ می‌شود
+    width: "clamp(100px, 15vw, 180px)",
     height: "clamp(100px, 15vw, 180px)",
     objectFit: "cover",
     borderRadius: "20px",
@@ -290,8 +273,6 @@ function App() {
         boxSizing: "border-box"
       }}
     >
-      
-      {/* رپر (Wrapper) برای اینکه ابعاد ویدیو و Overlay ها کاملاً فیت هم باشند */}
       <div style={{
         position: "relative",
         width: "100%",
@@ -308,6 +289,7 @@ function App() {
             ref={webcamRef}
             mirrored
             audio={false}
+            videoConstraints={videoConstraints} /* کانفیگ افزایش سرعت */
             className="webcam"
             style={{
               width: "100%",
@@ -317,7 +299,6 @@ function App() {
           />
         )}
 
-        {/* 🟩 مربع شناسایی شخص (Bounding Box) 🟩 */}
         <div 
           ref={boxRef}
           style={{
@@ -328,7 +309,7 @@ function App() {
             boxShadow: "0 0 15px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.4)",
             zIndex: 30,
             pointerEvents: "none",
-            transition: "all 0.1s ease-out" // برای اینکه حرکت مربع نرم‌تر (Smooth) شود
+            transition: "left 0.05s linear, top 0.05s linear, width 0.05s linear, height 0.05s linear" // حرکت نرم و بهینه کادر
           }}
         />
 
@@ -355,7 +336,6 @@ function App() {
           </div>
         )}
 
-        {/* 🔘 دکمه فعال‌سازی باکس 🔘 */}
         {!cameraOff && (
           <button
             onClick={toggleBox}
@@ -386,28 +366,12 @@ function App() {
           </button>
         )}
 
-        {/* تصاویر רי‌اکشن */}
-        {sonic && !cameraOff && (
-          <img src="/sonic.jpg" alt="sonic" className="cat" style={imageStyle} />
-        )}
-
-        {emoji && !cameraOff && !sonic && (
-          <img src="/emoji.jpg" alt="emoji" className="cat" style={imageStyle} />
-        )}
-
-        {mouse && !cameraOff && !sonic && !emoji && (
-          <img src="/mouse.jpg" alt="mouse" className="cat" style={imageStyle} />
-        )}
-
-        {ronaldo && !cameraOff && !sonic && !emoji && !mouse && (
-          <img src="/ronaldo.jpg" alt="ronaldo" className="cat" style={imageStyle} />
-        )}
-
-        {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && (
-          <img src="/cat.jpg" alt="cat" className="cat" style={imageStyle} />
-        )}
+        {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" style={imageStyle} />}
+        {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" style={imageStyle} />}
+        {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" style={imageStyle} />}
+        {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" style={imageStyle} />}
+        {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" style={imageStyle} />}
       </div>
-
     </div>
   );
 }
