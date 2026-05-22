@@ -14,7 +14,8 @@ function App() {
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
-  const [ronaldo, setRonaldo] = useState(false); // 👈 اضافه شد
+  const [ronaldo, setRonaldo] = useState(false);
+  const [emoji, setEmoji] = useState(false); // 👈 NEW
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -74,7 +75,6 @@ function App() {
     return dist(thumb, index) < 0.05;
   };
 
-  // 👇 جدید: تشخیص انگشت اشاره داخل دهان
   const isIndexInMouth = (hand, faceLm) => {
     const indexTip = hand[8];
 
@@ -87,6 +87,26 @@ function App() {
     };
 
     return dist(indexTip, mouthCenter) < 0.05;
+  };
+
+  // 👇 NEW: دو دست باز
+  const isHandsWideOpen = (hands) => {
+    if (!hands?.landmarks || hands.landmarks.length < 2) return false;
+
+    const h1 = hands.landmarks[0];
+    const h2 = hands.landmarks[1];
+
+    const isOpen = (h) => {
+      const fingersUp =
+        h[8].y < h[6].y &&
+        h[12].y < h[10].y &&
+        h[16].y < h[14].y &&
+        h[20].y < h[18].y;
+
+      return fingersUp;
+    };
+
+    return isOpen(h1) && isOpen(h2);
   };
 
   // ---------------- loop ----------------
@@ -109,8 +129,8 @@ function App() {
       const face = faceRef.current.detectForVideo(video, now);
       const hands = handRef.current.detectForVideo(video, now);
 
-      let showCat = false;
       let showRonaldoNow = false;
+      let showEmojiNow = false;
 
       // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
@@ -121,18 +141,15 @@ function App() {
 
         setMouthOpen(mouthOpen);
 
-        // ---------------- HAND + FACE COMBO ----------------
         if (hands.landmarks?.length > 0) {
           const h = hands.landmarks[0];
 
-          // 🖕 OFF CAMERA
           if (isMiddleFinger(h)) {
             setCameraOff(true);
             runningRef.current = false;
             return;
           }
 
-          // 👍 ON CAMERA
           if (isOKGesture(h)) {
             setCameraOff(false);
             if (!runningRef.current) {
@@ -141,14 +158,19 @@ function App() {
             }
           }
 
-          // 👇 NEW: RONALDO CONDITION
           if (isIndexInMouth(h, lm)) {
             showRonaldoNow = true;
+          }
+
+          // 👇 NEW EMOJI CONDITION
+          if (isHandsWideOpen(hands)) {
+            showEmojiNow = true;
           }
         }
       }
 
       setRonaldo(showRonaldoNow);
+      setEmoji(showEmojiNow);
     }
 
     requestAnimationFrame(loop);
@@ -171,11 +193,15 @@ function App() {
         </div>
       )}
 
-      {ronaldo && !cameraOff && (
+      {emoji && !cameraOff && (
+        <img src="/emoji.jpg" alt="emoji" className="cat" />
+      )}
+
+      {ronaldo && !cameraOff && !emoji && (
         <img src="/ronaldo.jpg" alt="ronaldo" className="cat" />
       )}
 
-      {mouthOpen && !cameraOff && !ronaldo && (
+      {mouthOpen && !cameraOff && !ronaldo && !emoji && (
         <img src="/cat.jpg" alt="cat" className="cat" />
       )}
     </div>
