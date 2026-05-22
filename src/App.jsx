@@ -14,8 +14,7 @@ function App() {
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
-
-  const [showMouse, setShowMouse] = useState(false);
+  const [ronaldo, setRonaldo] = useState(false); // 👈 اضافه شد
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -75,15 +74,19 @@ function App() {
     return dist(thumb, index) < 0.05;
   };
 
-  // 🐭 NEW: index + middle up (peace-ish but فقط دو انگشت)
-  const isMouseGesture = (h) => {
-    const indexUp = h[8].y < h[6].y;
-    const middleUp = h[12].y < h[10].y;
+  // 👇 جدید: تشخیص انگشت اشاره داخل دهان
+  const isIndexInMouth = (hand, faceLm) => {
+    const indexTip = hand[8];
 
-    const ringDown = h[16].y > h[14].y;
-    const pinkyDown = h[20].y > h[18].y;
+    const mouthTop = faceLm[13];
+    const mouthBottom = faceLm[14];
 
-    return indexUp && middleUp && ringDown && pinkyDown;
+    const mouthCenter = {
+      x: (mouthTop.x + mouthBottom.x) / 2,
+      y: (mouthTop.y + mouthBottom.y) / 2,
+    };
+
+    return dist(indexTip, mouthCenter) < 0.05;
   };
 
   // ---------------- loop ----------------
@@ -106,38 +109,46 @@ function App() {
       const face = faceRef.current.detectForVideo(video, now);
       const hands = handRef.current.detectForVideo(video, now);
 
+      let showCat = false;
+      let showRonaldoNow = false;
+
       // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
 
-        setMouthOpen(Math.abs(lm[13].y - lm[14].y) > 0.03);
+        const mouthOpen =
+          Math.abs(lm[13].y - lm[14].y) > 0.03;
+
+        setMouthOpen(mouthOpen);
+
+        // ---------------- HAND + FACE COMBO ----------------
+        if (hands.landmarks?.length > 0) {
+          const h = hands.landmarks[0];
+
+          // 🖕 OFF CAMERA
+          if (isMiddleFinger(h)) {
+            setCameraOff(true);
+            runningRef.current = false;
+            return;
+          }
+
+          // 👍 ON CAMERA
+          if (isOKGesture(h)) {
+            setCameraOff(false);
+            if (!runningRef.current) {
+              runningRef.current = true;
+              loop();
+            }
+          }
+
+          // 👇 NEW: RONALDO CONDITION
+          if (isIndexInMouth(h, lm)) {
+            showRonaldoNow = true;
+          }
+        }
       }
 
-      // ---------------- HAND ----------------
-      if (hands.landmarks?.length > 0) {
-        const h = hands.landmarks[0];
-
-        // 🖕 OFF CAMERA
-        if (isMiddleFinger(h)) {
-          setCameraOff(true);
-          setShowMouse(false);
-          runningRef.current = false;
-          return;
-        }
-
-        // 👍 ON CAMERA
-        if (isOKGesture(h)) {
-          setCameraOff(false);
-          runningRef.current = true;
-        }
-
-        // 🐭 MOUSE GESTURE
-        if (isMouseGesture(h)) {
-          setShowMouse(true);
-        } else {
-          setShowMouse(false);
-        }
-      }
+      setRonaldo(showRonaldoNow);
     }
 
     requestAnimationFrame(loop);
@@ -160,12 +171,12 @@ function App() {
         </div>
       )}
 
-      {mouthOpen && !cameraOff && (
-        <img src="/cat.jpg" alt="cat" className="cat" />
+      {ronaldo && !cameraOff && (
+        <img src="/ronaldo.jpg" alt="ronaldo" className="cat" />
       )}
 
-      {showMouse && !cameraOff && (
-        <img src="/mouse.jpg" alt="mouse" className="mouse" />
+      {mouthOpen && !cameraOff && !ronaldo && (
+        <img src="/cat.jpg" alt="cat" className="cat" />
       )}
     </div>
   );
