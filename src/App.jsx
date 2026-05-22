@@ -15,11 +15,10 @@ function App() {
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   
-  // استیت‌های عکس‌ها
   const [ronaldo, setRonaldo] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [mouse, setMouse] = useState(false);
-  const [sonic, setSonic] = useState(false); // 👈 NEW
+  const [sonic, setSonic] = useState(false); 
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -52,7 +51,7 @@ function App() {
           "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
       },
       runningMode: "VIDEO",
-      numHands: 2, // قابلیت تشخیص دو دست
+      numHands: 2,
     });
 
     runningRef.current = true;
@@ -63,21 +62,20 @@ function App() {
 
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
-  // 🖕 ژست فاک برای خاموش کردن دوربین
+  // 🖕 ژست فاک (با حساسیت بسیار بالا)
   const isMiddleFinger = (h) => {
-    const indexUp = h[8].y < h[6].y;
-    const middleUp = h[12].y < h[10].y;
+    // بقیه انگشت‌ها باید خم باشند (نوک انگشت پایین‌تر از مفصل وسط)
+    const indexDown = h[8].y > h[6].y;
     const ringDown = h[16].y > h[14].y;
     const pinkyDown = h[20].y > h[18].y;
+    
+    // انگشت وسط باید صاف باشد
+    const middleUp = h[12].y < h[10].y;
 
-    return middleUp && !indexUp && ringDown && pinkyDown;
-  };
+    // شرط حساسیت بالا: نوک انگشت وسط باید بالاترین نقطه کل انگشتان باشد
+    const isMiddleHighest = h[12].y < h[8].y && h[12].y < h[16].y && h[12].y < h[20].y;
 
-  // 👌 ژست اوکی برای روشن کردن دوربین
-  const isOKGesture = (h) => {
-    const thumb = h[4];
-    const index = h[8];
-    return dist(thumb, index) < 0.05;
+    return middleUp && indexDown && ringDown && pinkyDown && isMiddleHighest;
   };
 
   const isIndexInMouth = (hand, faceLm) => {
@@ -112,7 +110,6 @@ function App() {
     return isOpen(h1) && isOpen(h2);
   };
 
-  // 🐭 ژست عدد 2 (موش)
   const isMouseGesture = (h) => {
     const indexUp = h[8].y < h[6].y;
     const middleUp = h[12].y < h[10].y;
@@ -122,21 +119,16 @@ function App() {
     return indexUp && middleUp && ringDown && pinkyDown;
   };
 
-  // 👇 NEW: ژست دو دست روی سر (سونیک)
   const isHandsOnHead = (hands, faceLm) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
 
-    const headTop = faceLm[10]; // بالاترین نقطه پیشانی در مدل سه‌بعدی صورت
-    const eyesLevel = faceLm[159]; // حدود ارتفاع چشم‌ها
+    const headTop = faceLm[10]; 
+    const eyesLevel = faceLm[159]; 
 
-    // نقطه 9 مرکز کف دست است
     const h1 = hands.landmarks[0][9];
     const h2 = hands.landmarks[1][9];
 
-    // شرط ۱: دست‌ها باید در نیمه بالایی صورت یا بالاتر از آن باشند
     const isHighEnough = h1.y < eyesLevel.y && h2.y < eyesLevel.y;
-    
-    // شرط ۲: دست‌ها باید به سر نزدیک باشند (فاصله منطقی)
     const isCloseToHead = dist(h1, headTop) < 0.3 && dist(h2, headTop) < 0.3;
 
     return isHighEnough && isCloseToHead;
@@ -165,7 +157,7 @@ function App() {
       let showRonaldoNow = false;
       let showEmojiNow = false;
       let showMouseNow = false;
-      let showSonicNow = false; // 👈 NEW
+      let showSonicNow = false;
 
       // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
@@ -175,25 +167,23 @@ function App() {
         setMouthOpen(mouthOpen);
 
         if (hands.landmarks?.length > 0) {
-          const h1 = hands.landmarks[0]; // دست اول برای ژست‌های یک دستی
+          const h1 = hands.landmarks[0];
 
-          // دستورات سیستمی (روشن/خاموش)
+          // 👇 دستور خاموش شدن واقعی دوربین
           if (isMiddleFinger(h1)) {
             setCameraOff(true);
-          }
-          if (isOKGesture(h1)) {
-            setCameraOff(false);
+            runningRef.current = false; // توقف کامل پردازش هوش مصنوعی
+            return; // خروج از لوپ
           }
 
-          // 👇 اولویت‌بندی ژست‌ها با else if (برای اینکه دو تا عکس با هم نیان)
           if (isHandsOnHead(hands, lm)) {
-            showSonicNow = true;      // اولویت ۱: دست روی سر (سونیک)
+            showSonicNow = true;      
           } else if (isHandsWideOpen(hands)) {
-            showEmojiNow = true;      // اولویت ۲: دو دست باز (ایموجی)
+            showEmojiNow = true;      
           } else if (isIndexInMouth(h1, lm)) {
-            showRonaldoNow = true;    // اولویت ۳: انگشت تو دهان (رونالدو)
+            showRonaldoNow = true;    
           } else if (isMouseGesture(h1)) {
-            showMouseNow = true;      // اولویت ۴: ژست عدد دو (موش)
+            showMouseNow = true;      
           }
         }
       }
@@ -207,23 +197,47 @@ function App() {
     requestAnimationFrame(loop);
   };
 
+  // تابع روشن کردن دستی دوربین
+  const turnOnCamera = () => {
+    setCameraOff(false);
+    runningRef.current = true;
+    requestAnimationFrame(loop);
+  };
+
   return (
     <div className="container" style={{ position: "relative" }}>
-      <Webcam
-        ref={webcamRef}
-        mirrored
-        audio={false}
-        className="webcam"
-        style={{ opacity: cameraOff ? 0 : 1, transition: "opacity 0.3s" }}
-      />
+      
+      {/* ⚠️ وقتی دوربین خاموش شود، تگ وبکم کلاً حذف می‌شود تا دسترسی قطع شود */}
+      {!cameraOff && (
+        <Webcam
+          ref={webcamRef}
+          mirrored
+          audio={false}
+          className="webcam"
+        />
+      )}
 
+      {/* با کلیک روی این دکمه دوربین دوباره روشن می‌شود */}
       {cameraOff && (
-        <div style={{ position: "absolute", top: 20, left: 20, fontSize: 30, color: "red", zIndex: 10 }}>
-          Camera OFF 🚫
+        <div 
+          onClick={turnOnCamera}
+          style={{ 
+            position: "absolute", 
+            top: 20, 
+            left: 20, 
+            fontSize: 30, 
+            color: "red", 
+            zIndex: 10,
+            cursor: "pointer",
+            backgroundColor: "rgba(0,0,0,0.5)",
+            padding: "10px",
+            borderRadius: "8px"
+          }}
+        >
+          Camera OFF 🚫 (Click to Turn ON)
         </div>
       )}
 
-      {/* نمایش عکس‌ها بر اساس اولویت */}
       {sonic && !cameraOff && (
         <img src="/sonic.jpg" alt="sonic" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
