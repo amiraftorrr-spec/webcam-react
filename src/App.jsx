@@ -6,9 +6,8 @@ import {
   FilesetResolver,
 } from "@mediapipe/tasks-vision";
 
-function App() {
+export default function App() {
   const webcamRef = useRef(null);
-
   const faceRef = useRef(null);
   const handRef = useRef(null);
 
@@ -58,21 +57,15 @@ function App() {
     loop();
   };
 
-  // ---------------- helpers ----------------
+  // ---------------- helpers (منطق بدون تغییر) ----------------
 
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
-  // 🖕 ژست فاک (با حساسیت بسیار بالا)
   const isMiddleFinger = (h) => {
-    // بقیه انگشت‌ها باید خم باشند (نوک انگشت پایین‌تر از مفصل وسط)
     const indexDown = h[8].y > h[6].y;
     const ringDown = h[16].y > h[14].y;
     const pinkyDown = h[20].y > h[18].y;
-    
-    // انگشت وسط باید صاف باشد
     const middleUp = h[12].y < h[10].y;
-
-    // شرط حساسیت بالا: نوک انگشت وسط باید بالاترین نقطه کل انگشتان باشد
     const isMiddleHighest = h[12].y < h[8].y && h[12].y < h[16].y && h[12].y < h[20].y;
 
     return middleUp && indexDown && ringDown && pinkyDown && isMiddleHighest;
@@ -82,32 +75,19 @@ function App() {
     const indexTip = hand[8];
     const mouthTop = faceLm[13];
     const mouthBottom = faceLm[14];
-
     const mouthCenter = {
       x: (mouthTop.x + mouthBottom.x) / 2,
       y: (mouthTop.y + mouthBottom.y) / 2,
     };
-
     return dist(indexTip, mouthCenter) < 0.05;
   };
 
   const isHandsWideOpen = (hands) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
-
-    const h1 = hands.landmarks[0];
-    const h2 = hands.landmarks[1];
-
-    const isOpen = (h) => {
-      const fingersUp =
-        h[8].y < h[6].y &&
-        h[12].y < h[10].y &&
-        h[16].y < h[14].y &&
-        h[20].y < h[18].y;
-
-      return fingersUp;
-    };
-
-    return isOpen(h1) && isOpen(h2);
+    const isOpen = (h) => (
+      h[8].y < h[6].y && h[12].y < h[10].y && h[16].y < h[14].y && h[20].y < h[18].y
+    );
+    return isOpen(hands.landmarks[0]) && isOpen(hands.landmarks[1]);
   };
 
   const isMouseGesture = (h) => {
@@ -115,40 +95,32 @@ function App() {
     const middleUp = h[12].y < h[10].y;
     const ringDown = h[16].y > h[14].y;
     const pinkyDown = h[20].y > h[18].y;
-
     return indexUp && middleUp && ringDown && pinkyDown;
   };
 
   const isHandsOnHead = (hands, faceLm) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
-
     const headTop = faceLm[10]; 
     const eyesLevel = faceLm[159]; 
-
     const h1 = hands.landmarks[0][9];
     const h2 = hands.landmarks[1][9];
-
     const isHighEnough = h1.y < eyesLevel.y && h2.y < eyesLevel.y;
     const isCloseToHead = dist(h1, headTop) < 0.3 && dist(h2, headTop) < 0.3;
-
     return isHighEnough && isCloseToHead;
   };
 
-  // ---------------- loop ----------------
+  // ---------------- loop (منطق بدون تغییر) ----------------
 
   const loop = () => {
     if (!runningRef.current) return;
-
     const video = webcamRef.current?.video;
 
     if (video && video.readyState === 4) {
       const now = performance.now();
-
       if (now <= lastTimestampRef.current) {
         requestAnimationFrame(loop);
         return;
       }
-
       lastTimestampRef.current = now;
 
       const face = faceRef.current.detectForVideo(video, now);
@@ -159,32 +131,23 @@ function App() {
       let showMouseNow = false;
       let showSonicNow = false;
 
-      // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
-
-        const mouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
-        setMouthOpen(mouthOpen);
+        setMouthOpen(Math.abs(lm[13].y - lm[14].y) > 0.03);
 
         if (hands.landmarks?.length > 0) {
           const h1 = hands.landmarks[0];
 
-          // 👇 دستور خاموش شدن واقعی دوربین
           if (isMiddleFinger(h1)) {
             setCameraOff(true);
-            runningRef.current = false; // توقف کامل پردازش هوش مصنوعی
-            return; // خروج از لوپ
+            runningRef.current = false; 
+            return; 
           }
 
-          if (isHandsOnHead(hands, lm)) {
-            showSonicNow = true;      
-          } else if (isHandsWideOpen(hands)) {
-            showEmojiNow = true;      
-          } else if (isIndexInMouth(h1, lm)) {
-            showRonaldoNow = true;    
-          } else if (isMouseGesture(h1)) {
-            showMouseNow = true;      
-          }
+          if (isHandsOnHead(hands, lm)) showSonicNow = true;      
+          else if (isHandsWideOpen(hands)) showEmojiNow = true;      
+          else if (isIndexInMouth(h1, lm)) showRonaldoNow = true;    
+          else if (isMouseGesture(h1)) showMouseNow = true;      
         }
       }
 
@@ -193,72 +156,100 @@ function App() {
       setRonaldo(showRonaldoNow);
       setMouse(showMouseNow);
     }
-
     requestAnimationFrame(loop);
   };
 
-  // تابع روشن کردن دستی دوربین
   const turnOnCamera = () => {
     setCameraOff(false);
     runningRef.current = true;
     requestAnimationFrame(loop);
   };
 
+  // تعیین عکسی که باید نمایش داده شود
+  const getActiveImage = () => {
+    if (sonic) return "/sonic.jpg";
+    if (emoji) return "/emoji.jpg";
+    if (mouse) return "/mouse.jpg";
+    if (ronaldo) return "/ronaldo.jpg";
+    if (mouthOpen) return "/cat.jpg";
+    return null;
+  };
+
+  const activeImage = getActiveImage();
+
+  // ---------------- Render (UI/UX کاملاً ارتقا یافته) ----------------
   return (
-    <div className="container" style={{ position: "relative" }}>
+    <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 md:p-8 font-sans text-slate-200">
       
-      {/* ⚠️ وقتی دوربین خاموش شود، تگ وبکم کلاً حذف می‌شود تا دسترسی قطع شود */}
-      {!cameraOff && (
-        <Webcam
-          ref={webcamRef}
-          mirrored
-          audio={false}
-          className="webcam"
-        />
-      )}
+      {/* هدر سایت */}
+      <header className="mb-8 text-center">
+        <h1 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-cyan-400 to-indigo-500 bg-clip-text text-transparent drop-shadow-sm mb-2">
+          AI Gesture Tracker
+        </h1>
+        <p className="text-slate-400 text-sm md:text-base font-medium tracking-wide">
+          کنترل دوربین با هوش مصنوعی و حرکات بدن
+        </p>
+      </header>
 
-      {/* با کلیک روی این دکمه دوربین دوباره روشن می‌شود */}
-      {cameraOff && (
-        <div 
-          onClick={turnOnCamera}
-          style={{ 
-            position: "absolute", 
-            top: 20, 
-            left: 20, 
-            fontSize: 30, 
-            color: "red", 
-            zIndex: 10,
-            cursor: "pointer",
-            backgroundColor: "rgba(0,0,0,0.5)",
-            padding: "10px",
-            borderRadius: "8px"
-          }}
-        >
-          Camera OFF 🚫 (Click to Turn ON)
+      {/* بخش اصلی دوربین */}
+      <div className="relative w-full max-w-4xl aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(56,189,248,0.1)] border border-slate-800">
+        
+        {!cameraOff ? (
+          <Webcam
+            ref={webcamRef}
+            mirrored
+            audio={false}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md z-20 transition-all duration-500">
+            <span className="text-7xl mb-4 drop-shadow-lg">🚫</span>
+            <h2 className="text-3xl font-bold text-rose-500 mb-6 drop-shadow-md">دوربین قطع شد</h2>
+            <button 
+              onClick={turnOnCamera}
+              className="px-8 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-bold text-lg transition-all duration-300 shadow-[0_0_20px_rgba(225,29,72,0.4)] hover:shadow-[0_0_30px_rgba(225,29,72,0.6)] hover:-translate-y-1 active:scale-95"
+            >
+              روشن کردن مجدد
+            </button>
+          </div>
+        )}
+
+        {/* عکس ری‌اکشن (Floating Box) */}
+        {activeImage && !cameraOff && (
+          <div className="absolute bottom-6 right-6 md:bottom-8 md:right-8 w-28 h-28 md:w-36 md:h-36 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-2 shadow-2xl animate-bounce-slow transition-all duration-300">
+            <img 
+              src={activeImage} 
+              alt="Reaction" 
+              className="w-full h-full object-cover rounded-xl shadow-inner"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* راهنمای ژست‌ها */}
+      <div className="mt-8 grid grid-cols-2 md:grid-cols-5 gap-3 max-w-4xl w-full text-center">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 shadow-sm backdrop-blur-sm hover:bg-slate-800/50 transition-colors">
+          <span className="text-3xl block mb-2">🖕</span>
+          <span className="text-slate-400 text-xs md:text-sm font-semibold">خاموش کردن</span>
         </div>
-      )}
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 shadow-sm backdrop-blur-sm hover:bg-slate-800/50 transition-colors">
+          <span className="text-3xl block mb-2">😮</span>
+          <span className="text-slate-400 text-xs md:text-sm font-semibold">دهان باز (گربه)</span>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 shadow-sm backdrop-blur-sm hover:bg-slate-800/50 transition-colors">
+          <span className="text-3xl block mb-2">✌️</span>
+          <span className="text-slate-400 text-xs md:text-sm font-semibold">عدد دو (موش)</span>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 shadow-sm backdrop-blur-sm hover:bg-slate-800/50 transition-colors">
+          <span className="text-3xl block mb-2">🙌</span>
+          <span className="text-slate-400 text-xs md:text-sm font-semibold">دو دست باز</span>
+        </div>
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 shadow-sm backdrop-blur-sm hover:bg-slate-800/50 transition-colors col-span-2 md:col-span-1">
+          <span className="text-3xl block mb-2">💆‍♂️</span>
+          <span className="text-slate-400 text-xs md:text-sm font-semibold">دست روی سر</span>
+        </div>
+      </div>
 
-      {sonic && !cameraOff && (
-        <img src="/sonic.jpg" alt="sonic" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
-      )}
-
-      {emoji && !cameraOff && !sonic && (
-        <img src="/emoji.jpg" alt="emoji" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
-      )}
-
-      {mouse && !cameraOff && !sonic && !emoji && (
-        <img src="/mouse.jpg" alt="mouse" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
-      )}
-
-      {ronaldo && !cameraOff && !sonic && !emoji && !mouse && (
-        <img src="/ronaldo.jpg" alt="ronaldo" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
-      )}
-
-      {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && (
-        <img src="/cat.jpg" alt="cat" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
-      )}
-    </div>
+    </main>
   );
 }
-
-export default App;
