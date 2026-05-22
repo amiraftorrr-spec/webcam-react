@@ -54,8 +54,7 @@ function App() {
       setLoadingText("Loading Face Model...");
       faceRef.current = await FaceLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+          modelAssetPath: "/face_landmarker.task",
           delegate: "GPU",
         },
         runningMode: "VIDEO",
@@ -65,8 +64,7 @@ function App() {
       setLoadingText("Loading Hand Model...");
       handRef.current = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+          modelAssetPath: "/hand_landmarker.task",
           delegate: "GPU",
         },
         runningMode: "VIDEO",
