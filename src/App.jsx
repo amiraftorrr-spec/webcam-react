@@ -11,7 +11,7 @@ function App() {
   
   const faceRef = useRef(null);
   const handRef = useRef(null);
-  const canvasRef = useRef(null); // Canvas برای نقاشی خطوط و مربع روی تصویر
+  const canvasRef = useRef(null); 
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -27,6 +27,7 @@ function App() {
   const runningRef = useRef(false);
   const processingRef = useRef(false); 
 
+  // سایز ۴:۳ برای پر کردن بهتر فضای موبایل
   const videoConstraints = {
     width: 640,
     height: 480,
@@ -142,12 +143,10 @@ function App() {
       let showMouseNow = false;
       let showSonicNow = false;
 
-      // 🎨 رسم مستقیم نقاط صورت، خطوط دست و مربع روی Canvas
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext("2d");
         
-        // همسان‌سازی سایز کنواس با ویدیو در حال پخش
         if (canvas.width !== video.videoWidth) {
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
@@ -159,13 +158,12 @@ function App() {
           let minX = 1, minY = 1, maxX = 0, maxY = 0;
           let hasDetection = false;
 
-          // رسم صورت
+          // رسم نقاط صورت
           if (face.faceLandmarks?.length > 0) {
-            ctx.fillStyle = "rgba(56, 189, 248, 0.7)"; // رنگ فیروزه‌ای برای نقاط صورت
+            ctx.fillStyle = "rgba(56, 189, 248, 0.7)"; 
             face.faceLandmarks[0].forEach(p => {
               if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
               if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-              
               ctx.beginPath();
               ctx.arc(p.x * canvas.width, p.y * canvas.height, 1.5, 0, 2 * Math.PI);
               ctx.fill();
@@ -173,9 +171,8 @@ function App() {
             hasDetection = true;
           }
 
-          // رسم دست
+          // رسم دست‌ها
           if (hands.landmarks?.length > 0) {
-            // ساختار استخوانی استاندارد دست
             const HAND_CONNECTIONS = [
               [0,1], [1,2], [2,3], [3,4],
               [0,5], [5,6], [6,7], [7,8],
@@ -186,8 +183,7 @@ function App() {
             ];
 
             hands.landmarks.forEach(hand => {
-              // کشیدن خطوط استخوان
-              ctx.strokeStyle = "rgba(167, 139, 250, 0.8)"; // بنفش
+              ctx.strokeStyle = "rgba(167, 139, 250, 0.8)";
               ctx.lineWidth = 3;
               HAND_CONNECTIONS.forEach(([start, end]) => {
                 const p1 = hand[start];
@@ -198,12 +194,10 @@ function App() {
                 ctx.stroke();
               });
 
-              // کشیدن مفاصل (نقاط)
-              ctx.fillStyle = "#facc15"; // زرد
+              ctx.fillStyle = "#facc15"; 
               hand.forEach(p => {
                 if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
                 if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-                
                 ctx.beginPath();
                 ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 2 * Math.PI);
                 ctx.fill();
@@ -212,7 +206,7 @@ function App() {
             hasDetection = true;
           }
 
-          // رسم مربع کامل دور شخص
+          // رسم مربع 
           if (hasDetection) {
             minX = Math.max(0, minX - 0.05);
             maxX = Math.min(1, maxX + 0.05);
@@ -245,7 +239,6 @@ function App() {
             setCameraOff(true);
             runningRef.current = false; 
             processingRef.current = false;
-            // پاک کردن کنواس بعد از خاموشی
             if (canvasRef.current) canvasRef.current.getContext("2d").clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             return; 
           }
@@ -280,156 +273,212 @@ function App() {
     boxEnabledRef.current = newState;
   };
 
-  const imageStyle = {
-    position: "absolute", 
-    bottom: "5%", 
-    right: "5%", 
-    zIndex: 50,
-    width: "clamp(100px, 15vw, 180px)",
-    height: "clamp(100px, 15vw, 180px)",
-    objectFit: "cover",
-    borderRadius: "20px",
-    border: "1px solid rgba(255, 255, 255, 0.3)",
-    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
-    background: "rgba(255, 255, 255, 0.1)",
-    backdropFilter: "blur(10px)",
-    padding: "6px"
-  };
-
   return (
     <>
-      {/* استایل سراسری برای ریست کردن اسکرول بار و بردر سفید دور مرورگر */}
       <style>{`
         body, html {
           margin: 0;
           padding: 0;
           overflow: hidden;
           background-color: #020617;
+          font-family: system-ui, -apple-system, sans-serif;
         }
         * {
           box-sizing: border-box;
         }
+
+        .page-wrapper {
+          width: 100vw;
+          height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: radial-gradient(circle at 50% 0%, #1e1b4b, #020617 80%);
+          padding: 20px;
+        }
+
+        /* لایه‌بندی اصلی برنامه */
+        .main-layout {
+          position: relative;
+          width: 100%;
+          max-width: 1000px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* کادر دوربین */
+        .camera-container {
+          position: relative;
+          width: 100%;
+          background-color: #000;
+          border-radius: 24px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+          overflow: hidden;
+        }
+
+        .webcam {
+          width: 100%;
+          height: auto;
+          display: block; /* برای جلوگیری از فاصله اضافه زیر ویدیو */
+        }
+
+        .canvas-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 20;
+          pointer-events: none;
+          transform: scaleX(-1);
+        }
+
+        /* ظرف ری‌اکشن‌ها در دسکتاپ (گوشه دوربین) */
+        .reaction-container {
+          position: absolute;
+          bottom: 5%;
+          right: 5%;
+          z-index: 50;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* استایل عکس‌ها */
+        .reaction-image {
+          width: clamp(120px, 15vw, 180px);
+          height: clamp(120px, 15vw, 180px);
+          object-fit: cover;
+          border-radius: 20px;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(10px);
+          padding: 6px;
+          transition: all 0.3s ease;
+        }
+
+        /* استایل‌های ریسپانسیو (موبایل) */
+        @media (max-width: 768px) {
+          .page-wrapper {
+            padding: 16px;
+            align-items: flex-start; /* اجازه میده محتوا فضای عمودی رو پر کنه */
+          }
+          
+          .main-layout {
+            flex-direction: column;
+            height: 100%;
+            gap: 20px;
+          }
+
+          .camera-container {
+            width: 100%;
+            border-radius: 20px;
+            flex-shrink: 0;
+          }
+
+          /* در موبایل، باکس ری‌اکشن میاد پایین دوربین با فضای مجزا */
+          .reaction-container {
+            position: relative;
+            bottom: auto;
+            right: auto;
+            flex: 1; /* گرفتن بقیه فضای خالی پایین صفحه */
+            width: 100%;
+          }
+
+          .reaction-image {
+            width: clamp(180px, 50vw, 260px);
+            height: clamp(180px, 50vw, 260px);
+          }
+        }
       `}</style>
 
-      <div 
-        className="container" 
-        style={{ 
-          width: "100vw",
-          height: "100vh", /* فیکس کامل صفحه */
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "radial-gradient(circle at 50% 0%, #1e1b4b, #020617 80%)",
-          fontFamily: "system-ui, sans-serif",
-          padding: "20px"
-        }}
-      >
-        <div style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: "1000px",
-          aspectRatio: "16/9",
-          backgroundColor: "#000",
-          borderRadius: "24px",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
-          overflow: "hidden"
-        }}>
+      <div className="page-wrapper">
+        <div className="main-layout">
           
-          {!cameraOff && (
-            <Webcam
-              ref={webcamRef}
-              mirrored
-              audio={false}
-              videoConstraints={videoConstraints} 
-              className="webcam"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                position: "absolute",
-                top: 0,
-                left: 0
-              }}
-            />
-          )}
+          <div className="camera-container">
+            {!cameraOff && (
+              <Webcam
+                ref={webcamRef}
+                mirrored
+                audio={false}
+                videoConstraints={videoConstraints} 
+                className="webcam"
+              />
+            )}
 
-          {/* Canvas برای کشیدن خطوط استخوان و نقاط و باکس. آیینه شده تا با وبکم هماهنگ باشد */}
-          {!cameraOff && (
-            <canvas
-              ref={canvasRef}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                zIndex: 20,
-                pointerEvents: "none", // تا کلیک‌ها را مسدود نکند
-                transform: "scaleX(-1)" // دقیقا مشابه خاصیت mirrored وبکم
-              }}
-            />
-          )}
+            {!cameraOff && (
+              <canvas
+                ref={canvasRef}
+                className="canvas-overlay"
+              />
+            )}
 
-          {cameraOff && (
-            <div 
-              onClick={turnOnCamera}
-              style={{ 
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: "rgba(15, 23, 42, 0.7)",
-                backdropFilter: "blur(12px)",
-                color: "#fca5a5",
-                fontSize: "clamp(18px, 4vw, 26px)",
-                fontWeight: "bold",
-                cursor: "pointer",
-                zIndex: 10,
-                textAlign: "center"
-              }}
-            >
-              Camera OFF 🚫 (Click to Turn ON)
-            </div>
-          )}
+            {cameraOff && (
+              <div 
+                onClick={turnOnCamera}
+                style={{ 
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(15, 23, 42, 0.7)",
+                  backdropFilter: "blur(12px)",
+                  color: "#fca5a5",
+                  fontSize: "clamp(18px, 4vw, 26px)",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  zIndex: 10,
+                  textAlign: "center"
+                }}
+              >
+                Camera OFF 🚫 (Click to Turn ON)
+              </div>
+            )}
 
-          {!cameraOff && (
-            <button
-              onClick={toggleBox}
-              style={{
-                position: "absolute",
-                top: "5%",
-                left: "5%",
-                zIndex: 60,
-                padding: "10px 16px",
-                borderRadius: "12px",
-                border: "1px solid rgba(255,255,255,0.2)",
-                background: boxEnabled ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 0, 0, 0.5)",
-                color: boxEnabled ? "#38bdf8" : "#fff",
-                backdropFilter: "blur(8px)",
-                fontSize: "14px",
-                fontWeight: "bold",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                transition: "all 0.2s"
-              }}
-            >
-              <div style={{
-                width: "10px", height: "10px", borderRadius: "50%",
-                background: boxEnabled ? "#38bdf8" : "#94a3b8",
-                boxShadow: boxEnabled ? "0 0 10px #38bdf8" : "none"
-              }}/>
-              {boxEnabled ? "Hide Scanner" : "Show Scanner"}
-            </button>
-          )}
+            {!cameraOff && (
+              <button
+                onClick={toggleBox}
+                style={{
+                  position: "absolute",
+                  top: "5%",
+                  left: "5%",
+                  zIndex: 60,
+                  padding: "10px 16px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: boxEnabled ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 0, 0, 0.5)",
+                  color: boxEnabled ? "#38bdf8" : "#fff",
+                  backdropFilter: "blur(8px)",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+              >
+                <div style={{
+                  width: "10px", height: "10px", borderRadius: "50%",
+                  background: boxEnabled ? "#38bdf8" : "#94a3b8",
+                  boxShadow: boxEnabled ? "0 0 10px #38bdf8" : "none"
+                }}/>
+                {boxEnabled ? "Hide Scanner" : "Show Scanner"}
+              </button>
+            )}
+          </div>
 
-          {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" style={imageStyle} />}
-          {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" style={imageStyle} />}
-          {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" style={imageStyle} />}
-          {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" style={imageStyle} />}
-          {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" style={imageStyle} />}
+          <div className="reaction-container">
+            {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" className="reaction-image" />}
+            {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" className="reaction-image" />}
+            {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" className="reaction-image" />}
+            {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" className="reaction-image" />}
+            {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" className="reaction-image" />}
+          </div>
+
         </div>
       </div>
     </>
