@@ -15,7 +15,8 @@ function App() {
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [ronaldo, setRonaldo] = useState(false);
-  const [emoji, setEmoji] = useState(false); // 👈 NEW
+  const [emoji, setEmoji] = useState(false);
+  const [mouse, setMouse] = useState(false); // 👈 NEW: اضافه شدن استیت موش
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -57,8 +58,7 @@ function App() {
 
   // ---------------- helpers ----------------
 
-  const dist = (a, b) =>
-    Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
   const isMiddleFinger = (h) => {
     const indexUp = h[8].y < h[6].y;
@@ -75,9 +75,19 @@ function App() {
     return dist(thumb, index) < 0.05;
   };
 
+  // 👇 NEW: تشخیص ژست لایک (Thumbs Up)
+  const isLikeGesture = (h) => {
+    const thumbUp = h[4].y < h[3].y; // شست بالاست
+    const indexDown = h[8].y > h[6].y; // بقیه انگشت‌ها بسته‌اند
+    const middleDown = h[12].y > h[10].y;
+    const ringDown = h[16].y > h[14].y;
+    const pinkyDown = h[20].y > h[18].y;
+
+    return thumbUp && indexDown && middleDown && ringDown && pinkyDown;
+  };
+
   const isIndexInMouth = (hand, faceLm) => {
     const indexTip = hand[8];
-
     const mouthTop = faceLm[13];
     const mouthBottom = faceLm[14];
 
@@ -89,7 +99,6 @@ function App() {
     return dist(indexTip, mouthCenter) < 0.05;
   };
 
-  // 👇 NEW: دو دست باز
   const isHandsWideOpen = (hands) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
 
@@ -107,6 +116,16 @@ function App() {
     };
 
     return isOpen(h1) && isOpen(h2);
+  };
+
+  // 👇 NEW: تشخیص عدد 2 (V-Sign برای موش)
+  const isMouseGesture = (h) => {
+    const indexUp = h[8].y < h[6].y;
+    const middleUp = h[12].y < h[10].y;
+    const ringDown = h[16].y > h[14].y;
+    const pinkyDown = h[20].y > h[18].y;
+
+    return indexUp && middleUp && ringDown && pinkyDown;
   };
 
   // ---------------- loop ----------------
@@ -131,14 +150,13 @@ function App() {
 
       let showRonaldoNow = false;
       let showEmojiNow = false;
+      let showMouseNow = false; // 👈 NEW
 
       // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
 
-        const mouthOpen =
-          Math.abs(lm[13].y - lm[14].y) > 0.03;
-
+        const mouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
         setMouthOpen(mouthOpen);
 
         if (hands.landmarks?.length > 0) {
@@ -146,63 +164,69 @@ function App() {
 
           if (isMiddleFinger(h)) {
             setCameraOff(true);
-            runningRef.current = false;
-            return;
+            // ⚠️ اینجا قبلاً return و false میشد که باعث میشد دوربین نتونه دوباره روشن شه. الان حذفش کردم!
           }
 
-          if (isOKGesture(h)) {
+          // 👇 NEW: اگر ژست OK یا لایک بود، دوربین روشن شه
+          if (isOKGesture(h) || isLikeGesture(h)) {
             setCameraOff(false);
-            if (!runningRef.current) {
-              runningRef.current = true;
-              loop();
-            }
           }
 
           if (isIndexInMouth(h, lm)) {
             showRonaldoNow = true;
           }
 
-          // 👇 NEW EMOJI CONDITION
           if (isHandsWideOpen(hands)) {
             showEmojiNow = true;
+          }
+
+          // 👇 NEW: بررسی ژست عدد 2 برای موش
+          if (isMouseGesture(h)) {
+            showMouseNow = true;
           }
         }
       }
 
       setRonaldo(showRonaldoNow);
       setEmoji(showEmojiNow);
+      setMouse(showMouseNow); // 👈 NEW
     }
 
     requestAnimationFrame(loop);
   };
 
   return (
-    <div className="container">
-      {!cameraOff && (
-        <Webcam
-          ref={webcamRef}
-          mirrored
-          audio={false}
-          className="webcam"
-        />
-      )}
+    <div className="container" style={{ position: "relative" }}>
+      {/* ⚠️ دوربین رو با استایل نامرئی می‌کنیم تا کاملاً حذف نشه و بتونه ژست لایک رو تشخیص بده */}
+      <Webcam
+        ref={webcamRef}
+        mirrored
+        audio={false}
+        className="webcam"
+        style={{ opacity: cameraOff ? 0 : 1, transition: "opacity 0.3s" }}
+      />
 
       {cameraOff && (
-        <div style={{ fontSize: 30, color: "red" }}>
+        <div style={{ position: "absolute", top: 20, left: 20, fontSize: 30, color: "red", zIndex: 10 }}>
           Camera OFF 🚫
         </div>
       )}
 
+      {/* 👇 NEW: اضافه شدن تصویر موش */}
+      {mouse && !cameraOff && (
+        <img src="/mouse.jpg" alt="mouse" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
+      )}
+
       {emoji && !cameraOff && (
-        <img src="/emoji.jpg" alt="emoji" className="cat" />
+        <img src="/emoji.jpg" alt="emoji" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
 
-      {ronaldo && !cameraOff && !emoji && (
-        <img src="/ronaldo.jpg" alt="ronaldo" className="cat" />
+      {ronaldo && !cameraOff && !emoji && !mouse && (
+        <img src="/ronaldo.jpg" alt="ronaldo" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
 
-      {mouthOpen && !cameraOff && !ronaldo && !emoji && (
-        <img src="/cat.jpg" alt="cat" className="cat" />
+      {mouthOpen && !cameraOff && !ronaldo && !emoji && !mouse && (
+        <img src="/cat.jpg" alt="cat" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
     </div>
   );
