@@ -5,7 +5,6 @@ import {
   HandLandmarker,
   FilesetResolver,
 } from "@mediapipe/tasks-vision";
-import "./App.css";
 
 function App() {
   const webcamRef = useRef(null);
@@ -15,11 +14,11 @@ function App() {
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
-
+  
   const [ronaldo, setRonaldo] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [mouse, setMouse] = useState(false);
-  const [sonic, setSonic] = useState(false);
+  const [sonic, setSonic] = useState(false); 
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -59,15 +58,18 @@ function App() {
     loop();
   };
 
+  // ---------------- helpers ----------------
+
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
   const isMiddleFinger = (h) => {
     const indexDown = h[8].y > h[6].y;
     const ringDown = h[16].y > h[14].y;
     const pinkyDown = h[20].y > h[18].y;
+    
     const middleUp = h[12].y < h[10].y;
-    const isMiddleHighest =
-      h[12].y < h[8].y && h[12].y < h[16].y && h[12].y < h[20].y;
+
+    const isMiddleHighest = h[12].y < h[8].y && h[12].y < h[16].y && h[12].y < h[20].y;
 
     return middleUp && indexDown && ringDown && pinkyDown && isMiddleHighest;
   };
@@ -116,8 +118,8 @@ function App() {
   const isHandsOnHead = (hands, faceLm) => {
     if (!hands?.landmarks || hands.landmarks.length < 2) return false;
 
-    const headTop = faceLm[10];
-    const eyesLevel = faceLm[159];
+    const headTop = faceLm[10]; 
+    const eyesLevel = faceLm[159]; 
 
     const h1 = hands.landmarks[0][9];
     const h2 = hands.landmarks[1][9];
@@ -127,6 +129,8 @@ function App() {
 
     return isHighEnough && isCloseToHead;
   };
+
+  // ---------------- loop ----------------
 
   const loop = () => {
     if (!runningRef.current) return;
@@ -151,6 +155,7 @@ function App() {
       let showMouseNow = false;
       let showSonicNow = false;
 
+      // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
 
@@ -162,18 +167,18 @@ function App() {
 
           if (isMiddleFinger(h1)) {
             setCameraOff(true);
-            runningRef.current = false;
-            return;
+            runningRef.current = false; 
+            return; 
           }
 
           if (isHandsOnHead(hands, lm)) {
-            showSonicNow = true;
+            showSonicNow = true;      
           } else if (isHandsWideOpen(hands)) {
-            showEmojiNow = true;
+            showEmojiNow = true;      
           } else if (isIndexInMouth(h1, lm)) {
-            showRonaldoNow = true;
+            showRonaldoNow = true;    
           } else if (isMouseGesture(h1)) {
-            showMouseNow = true;
+            showMouseNow = true;      
           }
         }
       }
@@ -193,62 +198,103 @@ function App() {
     requestAnimationFrame(loop);
   };
 
+  // آبجکت استایل مشترک برای همه عکس‌ها (برای جلوگیری از تکرار کد)
+  const imageStyle = {
+    position: "absolute", 
+    bottom: "30px", // به جای بالا چپ، آوردمش پایین راست مثل یک پنل مدرن
+    right: "30px", 
+    zIndex: 50,
+    width: "130px",
+    height: "130px",
+    objectFit: "cover",
+    borderRadius: "20px",
+    border: "1px solid rgba(255, 255, 255, 0.3)",
+    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+    background: "rgba(255, 255, 255, 0.1)",
+    backdropFilter: "blur(10px)",
+    padding: "6px" // یک قاب شیشه‌ای خوشگل دور عکس ایجاد میکنه
+  };
+
   return (
-    <div className="app-shell">
-      <div className="bg-orb bg-orb-1"></div>
-      <div className="bg-orb bg-orb-2"></div>
+    <div 
+      className="container" 
+      style={{ 
+        position: "relative",
+        width: "100vw",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "radial-gradient(circle at 50% 0%, #1e1b4b, #020617 80%)", // بک‌گراند تاریک پریمیوم
+        overflow: "hidden",
+        fontFamily: "system-ui, sans-serif"
+      }}
+    >
+      
+      {!cameraOff && (
+        <Webcam
+          ref={webcamRef}
+          mirrored
+          audio={false}
+          className="webcam"
+          style={{
+            width: "90%",
+            maxWidth: "1000px",
+            aspectRatio: "16/9",
+            objectFit: "cover",
+            borderRadius: "24px",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
+            backgroundColor: "#000"
+          }}
+        />
+      )}
 
-      <div className="container">
-        <div className="camera-card">
-          {!cameraOff && (
-            <Webcam
-              ref={webcamRef}
-              mirrored
-              audio={false}
-              className="webcam"
-            />
-          )}
-
-          {cameraOff && (
-            <button
-              type="button"
-              onClick={turnOnCamera}
-              className="camera-off-button"
-            >
-              <span className="camera-off-icon">🚫</span>
-              <span className="camera-off-text">Camera OFF</span>
-              <span className="camera-off-subtext">Click to turn on</span>
-            </button>
-          )}
-
-          {sonic && !cameraOff && (
-            <img src="/sonic.jpg" alt="sonic" className="overlay-image" />
-          )}
-
-          {emoji && !cameraOff && !sonic && (
-            <img src="/emoji.jpg" alt="emoji" className="overlay-image" />
-          )}
-
-          {mouse && !cameraOff && !sonic && !emoji && (
-            <img src="/mouse.jpg" alt="mouse" className="overlay-image" />
-          )}
-
-          {ronaldo && !cameraOff && !sonic && !emoji && !mouse && (
-            <img src="/ronaldo.jpg" alt="ronaldo" className="overlay-image" />
-          )}
-
-          {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && (
-            <img src="/cat.jpg" alt="cat" className="overlay-image" />
-          )}
-
-          <div className="hud">
-            <div className="hud-badge">AI Gesture Cam</div>
-            <div className={`hud-status ${cameraOff ? "is-off" : "is-live"}`}>
-              {cameraOff ? "OFFLINE" : "LIVE"}
-            </div>
-          </div>
+      {cameraOff && (
+        <div 
+          onClick={turnOnCamera}
+          style={{ 
+            width: "90%",
+            maxWidth: "1000px",
+            aspectRatio: "16/9",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: "24px",
+            backgroundColor: "rgba(15, 23, 42, 0.7)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(248, 113, 113, 0.3)",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            color: "#fca5a5",
+            fontSize: "26px",
+            fontWeight: "bold",
+            cursor: "pointer",
+            zIndex: 10,
+            textAlign: "center"
+          }}
+        >
+          Camera OFF 🚫 (Click to Turn ON)
         </div>
-      </div>
+      )}
+
+      {sonic && !cameraOff && (
+        <img src="/sonic.jpg" alt="sonic" className="cat" style={imageStyle} />
+      )}
+
+      {emoji && !cameraOff && !sonic && (
+        <img src="/emoji.jpg" alt="emoji" className="cat" style={imageStyle} />
+      )}
+
+      {mouse && !cameraOff && !sonic && !emoji && (
+        <img src="/mouse.jpg" alt="mouse" className="cat" style={imageStyle} />
+      )}
+
+      {ronaldo && !cameraOff && !sonic && !emoji && !mouse && (
+        <img src="/ronaldo.jpg" alt="ronaldo" className="cat" style={imageStyle} />
+      )}
+
+      {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && (
+        <img src="/cat.jpg" alt="cat" className="cat" style={imageStyle} />
+      )}
     </div>
   );
 }
