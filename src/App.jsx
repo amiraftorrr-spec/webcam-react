@@ -14,9 +14,12 @@ function App() {
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
+  
+  // استیت‌های عکس‌ها
   const [ronaldo, setRonaldo] = useState(false);
   const [emoji, setEmoji] = useState(false);
-  const [mouse, setMouse] = useState(false); // 👈 NEW: اضافه شدن استیت موش
+  const [mouse, setMouse] = useState(false);
+  const [sonic, setSonic] = useState(false); // 👈 NEW
 
   const runningRef = useRef(false);
   const lastTimestampRef = useRef(0);
@@ -49,7 +52,7 @@ function App() {
           "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
       },
       runningMode: "VIDEO",
-      numHands: 2,
+      numHands: 2, // قابلیت تشخیص دو دست
     });
 
     runningRef.current = true;
@@ -60,6 +63,7 @@ function App() {
 
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 
+  // 🖕 ژست فاک برای خاموش کردن دوربین
   const isMiddleFinger = (h) => {
     const indexUp = h[8].y < h[6].y;
     const middleUp = h[12].y < h[10].y;
@@ -69,21 +73,11 @@ function App() {
     return middleUp && !indexUp && ringDown && pinkyDown;
   };
 
+  // 👌 ژست اوکی برای روشن کردن دوربین
   const isOKGesture = (h) => {
     const thumb = h[4];
     const index = h[8];
     return dist(thumb, index) < 0.05;
-  };
-
-  // 👇 NEW: تشخیص ژست لایک (Thumbs Up)
-  const isLikeGesture = (h) => {
-    const thumbUp = h[4].y < h[3].y; // شست بالاست
-    const indexDown = h[8].y > h[6].y; // بقیه انگشت‌ها بسته‌اند
-    const middleDown = h[12].y > h[10].y;
-    const ringDown = h[16].y > h[14].y;
-    const pinkyDown = h[20].y > h[18].y;
-
-    return thumbUp && indexDown && middleDown && ringDown && pinkyDown;
   };
 
   const isIndexInMouth = (hand, faceLm) => {
@@ -118,7 +112,7 @@ function App() {
     return isOpen(h1) && isOpen(h2);
   };
 
-  // 👇 NEW: تشخیص عدد 2 (V-Sign برای موش)
+  // 🐭 ژست عدد 2 (موش)
   const isMouseGesture = (h) => {
     const indexUp = h[8].y < h[6].y;
     const middleUp = h[12].y < h[10].y;
@@ -126,6 +120,26 @@ function App() {
     const pinkyDown = h[20].y > h[18].y;
 
     return indexUp && middleUp && ringDown && pinkyDown;
+  };
+
+  // 👇 NEW: ژست دو دست روی سر (سونیک)
+  const isHandsOnHead = (hands, faceLm) => {
+    if (!hands?.landmarks || hands.landmarks.length < 2) return false;
+
+    const headTop = faceLm[10]; // بالاترین نقطه پیشانی در مدل سه‌بعدی صورت
+    const eyesLevel = faceLm[159]; // حدود ارتفاع چشم‌ها
+
+    // نقطه 9 مرکز کف دست است
+    const h1 = hands.landmarks[0][9];
+    const h2 = hands.landmarks[1][9];
+
+    // شرط ۱: دست‌ها باید در نیمه بالایی صورت یا بالاتر از آن باشند
+    const isHighEnough = h1.y < eyesLevel.y && h2.y < eyesLevel.y;
+    
+    // شرط ۲: دست‌ها باید به سر نزدیک باشند (فاصله منطقی)
+    const isCloseToHead = dist(h1, headTop) < 0.3 && dist(h2, headTop) < 0.3;
+
+    return isHighEnough && isCloseToHead;
   };
 
   // ---------------- loop ----------------
@@ -150,7 +164,8 @@ function App() {
 
       let showRonaldoNow = false;
       let showEmojiNow = false;
-      let showMouseNow = false; // 👈 NEW
+      let showMouseNow = false;
+      let showSonicNow = false; // 👈 NEW
 
       // ---------------- FACE ----------------
       if (face.faceLandmarks?.length > 0) {
@@ -160,36 +175,33 @@ function App() {
         setMouthOpen(mouthOpen);
 
         if (hands.landmarks?.length > 0) {
-          const h = hands.landmarks[0];
+          const h1 = hands.landmarks[0]; // دست اول برای ژست‌های یک دستی
 
-          if (isMiddleFinger(h)) {
+          // دستورات سیستمی (روشن/خاموش)
+          if (isMiddleFinger(h1)) {
             setCameraOff(true);
-            // ⚠️ اینجا قبلاً return و false میشد که باعث میشد دوربین نتونه دوباره روشن شه. الان حذفش کردم!
           }
-
-          // 👇 NEW: اگر ژست OK یا لایک بود، دوربین روشن شه
-          if (isOKGesture(h) || isLikeGesture(h)) {
+          if (isOKGesture(h1)) {
             setCameraOff(false);
           }
 
-          if (isIndexInMouth(h, lm)) {
-            showRonaldoNow = true;
-          }
-
-          if (isHandsWideOpen(hands)) {
-            showEmojiNow = true;
-          }
-
-          // 👇 NEW: بررسی ژست عدد 2 برای موش
-          if (isMouseGesture(h)) {
-            showMouseNow = true;
+          // 👇 اولویت‌بندی ژست‌ها با else if (برای اینکه دو تا عکس با هم نیان)
+          if (isHandsOnHead(hands, lm)) {
+            showSonicNow = true;      // اولویت ۱: دست روی سر (سونیک)
+          } else if (isHandsWideOpen(hands)) {
+            showEmojiNow = true;      // اولویت ۲: دو دست باز (ایموجی)
+          } else if (isIndexInMouth(h1, lm)) {
+            showRonaldoNow = true;    // اولویت ۳: انگشت تو دهان (رونالدو)
+          } else if (isMouseGesture(h1)) {
+            showMouseNow = true;      // اولویت ۴: ژست عدد دو (موش)
           }
         }
       }
 
-      setRonaldo(showRonaldoNow);
+      setSonic(showSonicNow);
       setEmoji(showEmojiNow);
-      setMouse(showMouseNow); // 👈 NEW
+      setRonaldo(showRonaldoNow);
+      setMouse(showMouseNow);
     }
 
     requestAnimationFrame(loop);
@@ -197,7 +209,6 @@ function App() {
 
   return (
     <div className="container" style={{ position: "relative" }}>
-      {/* ⚠️ دوربین رو با استایل نامرئی می‌کنیم تا کاملاً حذف نشه و بتونه ژست لایک رو تشخیص بده */}
       <Webcam
         ref={webcamRef}
         mirrored
@@ -212,20 +223,24 @@ function App() {
         </div>
       )}
 
-      {/* 👇 NEW: اضافه شدن تصویر موش */}
-      {mouse && !cameraOff && (
-        <img src="/mouse.jpg" alt="mouse" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
+      {/* نمایش عکس‌ها بر اساس اولویت */}
+      {sonic && !cameraOff && (
+        <img src="/sonic.jpg" alt="sonic" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
 
-      {emoji && !cameraOff && (
+      {emoji && !cameraOff && !sonic && (
         <img src="/emoji.jpg" alt="emoji" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
 
-      {ronaldo && !cameraOff && !emoji && !mouse && (
+      {mouse && !cameraOff && !sonic && !emoji && (
+        <img src="/mouse.jpg" alt="mouse" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
+      )}
+
+      {ronaldo && !cameraOff && !sonic && !emoji && !mouse && (
         <img src="/ronaldo.jpg" alt="ronaldo" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
 
-      {mouthOpen && !cameraOff && !ronaldo && !emoji && !mouse && (
+      {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && (
         <img src="/cat.jpg" alt="cat" className="cat" style={{ position: "absolute", top: 60, left: 20, zIndex: 10 }} />
       )}
     </div>
