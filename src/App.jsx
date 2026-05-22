@@ -24,10 +24,13 @@ function App() {
   const [boxEnabled, setBoxEnabled] = useState(false);
   const boxEnabledRef = useRef(false);
 
+  // 👇 استیت‌های لودینگ اضافه شد
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingText, setLoadingText] = useState("Initializing AI Models...");
+
   const runningRef = useRef(false);
   const processingRef = useRef(false); 
 
-  // سایز ۴:۳ برای پر کردن بهتر فضای موبایل
   const videoConstraints = {
     width: 640,
     height: 480,
@@ -42,32 +45,47 @@ function App() {
   }, []);
 
   const init = async () => {
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-    );
+    try {
+      setLoadingText("Downloading Vision Runtime...");
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
 
-    faceRef.current = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
-        delegate: "GPU",
-      },
-      runningMode: "VIDEO",
-      numFaces: 1,
-    });
+      setLoadingText("Loading Face Model...");
+      faceRef.current = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      });
 
-    handRef.current = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-        delegate: "GPU",
-      },
-      runningMode: "VIDEO",
-      numHands: 2,
-    });
+      setLoadingText("Loading Hand Model...");
+      handRef.current = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+          delegate: "GPU",
+        },
+        runningMode: "VIDEO",
+        numHands: 2,
+      });
 
-    runningRef.current = true;
-    loop();
+      setLoadingText("Models Ready!");
+      
+      // دادن یه تاخیر نیم ثانیه‌ای برای محو شدن نرم لودینگ
+      setTimeout(() => {
+        setIsLoading(false);
+        runningRef.current = true;
+        loop();
+      }, 500);
+
+    } catch (error) {
+      setLoadingText("Error loading models!");
+      console.error(error);
+    }
   };
 
   // ---------------- helpers ----------------
@@ -158,7 +176,6 @@ function App() {
           let minX = 1, minY = 1, maxX = 0, maxY = 0;
           let hasDetection = false;
 
-          // رسم نقاط صورت
           if (face.faceLandmarks?.length > 0) {
             ctx.fillStyle = "rgba(56, 189, 248, 0.7)"; 
             face.faceLandmarks[0].forEach(p => {
@@ -171,7 +188,6 @@ function App() {
             hasDetection = true;
           }
 
-          // رسم دست‌ها
           if (hands.landmarks?.length > 0) {
             const HAND_CONNECTIONS = [
               [0,1], [1,2], [2,3], [3,4],
@@ -206,7 +222,6 @@ function App() {
             hasDetection = true;
           }
 
-          // رسم مربع 
           if (hasDetection) {
             minX = Math.max(0, minX - 0.05);
             maxX = Math.min(1, maxX + 0.05);
@@ -225,7 +240,6 @@ function App() {
         }
       }
 
-      // ---------------- بررسی ژست‌ها ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
         const isMouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
@@ -297,7 +311,6 @@ function App() {
           padding: 20px;
         }
 
-        /* لایه‌بندی اصلی برنامه */
         .main-layout {
           position: relative;
           width: 100%;
@@ -307,7 +320,6 @@ function App() {
           justify-content: center;
         }
 
-        /* کادر دوربین */
         .camera-container {
           position: relative;
           width: 100%;
@@ -320,7 +332,7 @@ function App() {
         .webcam {
           width: 100%;
           height: auto;
-          display: block; /* برای جلوگیری از فاصله اضافه زیر ویدیو */
+          display: block;
         }
 
         .canvas-overlay {
@@ -334,7 +346,6 @@ function App() {
           transform: scaleX(-1);
         }
 
-        /* ظرف ری‌اکشن‌ها در دسکتاپ (گوشه دوربین) */
         .reaction-container {
           position: absolute;
           bottom: 5%;
@@ -345,7 +356,6 @@ function App() {
           justify-content: center;
         }
 
-        /* استایل عکس‌ها */
         .reaction-image {
           width: clamp(120px, 15vw, 180px);
           height: clamp(120px, 15vw, 180px);
@@ -358,12 +368,17 @@ function App() {
           padding: 6px;
           transition: all 0.3s ease;
         }
+        
+        /* انیمیشن چرخش برای لودینگ */
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
 
-        /* استایل‌های ریسپانسیو (موبایل) */
         @media (max-width: 768px) {
           .page-wrapper {
             padding: 16px;
-            align-items: flex-start; /* اجازه میده محتوا فضای عمودی رو پر کنه */
+            align-items: flex-start;
           }
           
           .main-layout {
@@ -378,12 +393,11 @@ function App() {
             flex-shrink: 0;
           }
 
-          /* در موبایل، باکس ری‌اکشن میاد پایین دوربین با فضای مجزا */
           .reaction-container {
             position: relative;
             bottom: auto;
             right: auto;
-            flex: 1; /* گرفتن بقیه فضای خالی پایین صفحه */
+            flex: 1; 
             width: 100%;
           }
 
@@ -398,6 +412,36 @@ function App() {
         <div className="main-layout">
           
           <div className="camera-container">
+            {/* 👇 صفحه لودینگ روی دوربین */}
+            {isLoading && (
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 100,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(2, 6, 23, 0.9)",
+                backdropFilter: "blur(8px)",
+                color: "#fff",
+              }}>
+                <div style={{
+                  width: "50px",
+                  height: "50px",
+                  border: "4px solid rgba(255,255,255,0.1)",
+                  borderTopColor: "#38bdf8",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  marginBottom: "20px"
+                }}/>
+                <h3 style={{ margin: 0, fontSize: "20px", color: "#e2e8f0" }}>{loadingText}</h3>
+                <p style={{ margin: "8px 0 0 0", fontSize: "14px", color: "#94a3b8" }}>
+                  Downloading ~10MB model files...
+                </p>
+              </div>
+            )}
+
             {!cameraOff && (
               <Webcam
                 ref={webcamRef}
@@ -438,7 +482,7 @@ function App() {
               </div>
             )}
 
-            {!cameraOff && (
+            {!cameraOff && !isLoading && (
               <button
                 onClick={toggleBox}
                 style={{
@@ -472,11 +516,11 @@ function App() {
           </div>
 
           <div className="reaction-container">
-            {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" className="reaction-image" />}
-            {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" className="reaction-image" />}
-            {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" className="reaction-image" />}
-            {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" className="reaction-image" />}
-            {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" className="reaction-image" />}
+            {sonic && !cameraOff && <img src="/sonic.webp" alt="sonic" className="reaction-image" />}
+            {emoji && !cameraOff && !sonic && <img src="/emoji.webp" alt="emoji" className="reaction-image" />}
+            {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.webp" alt="mouse" className="reaction-image" />}
+            {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.webp" alt="ronaldo" className="reaction-image" />}
+            {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.webp" alt="cat" className="reaction-image" />}
           </div>
 
         </div>
