@@ -1,0 +1,42 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
+}
+
+.container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.webcam {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cat {
+  position: absolute;
+
+  width: 300px;
+
+  left: 20px;
+  bottom: 20px;
+
+  border-radius: 20px;
+
+  animation: pop 0.2s ease;
+}
+
+@keyframes pop {
+
+  from {
+    transform: scale(0);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
