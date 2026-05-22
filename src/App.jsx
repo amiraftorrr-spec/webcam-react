@@ -9,10 +9,9 @@ import {
 function App() {
   const webcamRef = useRef(null);
   
-  // رفرنس‌های مدل‌ها
   const faceRef = useRef(null);
   const handRef = useRef(null);
-  const boxRef = useRef(null); 
+  const canvasRef = useRef(null); // Canvas برای نقاشی خطوط و مربع روی تصویر
 
   const [mouthOpen, setMouthOpen] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -26,9 +25,8 @@ function App() {
   const boxEnabledRef = useRef(false);
 
   const runningRef = useRef(false);
-  const processingRef = useRef(false); // جلوگیری از پردازش همزمان چند فریم
+  const processingRef = useRef(false); 
 
-  // کانفیگ وبکم برای پرفورمنس بالاتر (رزولوشن کمتر مساوی است با پردازش بسیار سریع‌تر)
   const videoConstraints = {
     width: 640,
     height: 480,
@@ -51,7 +49,7 @@ function App() {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
-        delegate: "GPU", // روشن کردن شتاب‌دهنده گرافیکی
+        delegate: "GPU",
       },
       runningMode: "VIDEO",
       numFaces: 1,
@@ -61,7 +59,7 @@ function App() {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-        delegate: "GPU", // روشن کردن شتاب‌دهنده گرافیکی
+        delegate: "GPU",
       },
       runningMode: "VIDEO",
       numHands: 2,
@@ -125,7 +123,6 @@ function App() {
   const loop = () => {
     if (!runningRef.current) return;
     
-    // جلوگیری از گیر کردن در پردازش قبلی
     if (processingRef.current) {
         requestAnimationFrame(loop);
         return;
@@ -137,7 +134,6 @@ function App() {
       processingRef.current = true;
       const now = performance.now();
 
-      // پردازش بسیار سریع‌تر بدون صف‌های سنگین
       const face = faceRef.current.detectForVideo(video, now);
       const hands = handRef.current.detectForVideo(video, now);
 
@@ -146,59 +142,100 @@ function App() {
       let showMouseNow = false;
       let showSonicNow = false;
 
-      // نمایش مربع تشخیص شخص (بدون رندر ریکت برای پرفورمنس بالاتر)
-      if (boxEnabledRef.current && boxRef.current) {
-        let minX = 1, minY = 1, maxX = 0, maxY = 0;
-        let hasDetection = false;
-
-        if (face.faceLandmarks?.length > 0) {
-          face.faceLandmarks[0].forEach(p => {
-            if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-            if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-          });
-          hasDetection = true;
+      // 🎨 رسم مستقیم نقاط صورت، خطوط دست و مربع روی Canvas
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        
+        // همسان‌سازی سایز کنواس با ویدیو در حال پخش
+        if (canvas.width !== video.videoWidth) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
         }
 
-        if (hands.landmarks?.length > 0) {
-          hands.landmarks.forEach(hand => {
-            hand.forEach(p => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (boxEnabledRef.current) {
+          let minX = 1, minY = 1, maxX = 0, maxY = 0;
+          let hasDetection = false;
+
+          // رسم صورت
+          if (face.faceLandmarks?.length > 0) {
+            ctx.fillStyle = "rgba(56, 189, 248, 0.7)"; // رنگ فیروزه‌ای برای نقاط صورت
+            face.faceLandmarks[0].forEach(p => {
               if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
               if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+              
+              ctx.beginPath();
+              ctx.arc(p.x * canvas.width, p.y * canvas.height, 1.5, 0, 2 * Math.PI);
+              ctx.fill();
             });
-          });
-          hasDetection = true;
+            hasDetection = true;
+          }
+
+          // رسم دست
+          if (hands.landmarks?.length > 0) {
+            // ساختار استخوانی استاندارد دست
+            const HAND_CONNECTIONS = [
+              [0,1], [1,2], [2,3], [3,4],
+              [0,5], [5,6], [6,7], [7,8],
+              [5,9], [9,10], [10,11], [11,12],
+              [9,13], [13,14], [14,15], [15,16],
+              [13,17], [17,18], [18,19], [19,20],
+              [0,17]
+            ];
+
+            hands.landmarks.forEach(hand => {
+              // کشیدن خطوط استخوان
+              ctx.strokeStyle = "rgba(167, 139, 250, 0.8)"; // بنفش
+              ctx.lineWidth = 3;
+              HAND_CONNECTIONS.forEach(([start, end]) => {
+                const p1 = hand[start];
+                const p2 = hand[end];
+                ctx.beginPath();
+                ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+                ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+                ctx.stroke();
+              });
+
+              // کشیدن مفاصل (نقاط)
+              ctx.fillStyle = "#facc15"; // زرد
+              hand.forEach(p => {
+                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+                
+                ctx.beginPath();
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 2 * Math.PI);
+                ctx.fill();
+              });
+            });
+            hasDetection = true;
+          }
+
+          // رسم مربع کامل دور شخص
+          if (hasDetection) {
+            minX = Math.max(0, minX - 0.05);
+            maxX = Math.min(1, maxX + 0.05);
+            minY = Math.max(0, minY - 0.1); 
+            maxY = Math.min(1, maxY + 0.05);
+
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(
+              minX * canvas.width,
+              minY * canvas.height,
+              (maxX - minX) * canvas.width,
+              (maxY - minY) * canvas.height
+            );
+          }
         }
-
-        if (hasDetection) {
-          minX = Math.max(0, minX - 0.05);
-          maxX = Math.min(1, maxX + 0.05);
-          minY = Math.max(0, minY - 0.1); 
-          maxY = Math.min(1, maxY + 0.05);
-
-          const left = (1 - maxX) * 100;
-          const top = minY * 100;
-          const width = (maxX - minX) * 100;
-          const height = (maxY - minY) * 100;
-
-          boxRef.current.style.display = "block";
-          boxRef.current.style.left = `${left}%`;
-          boxRef.current.style.top = `${top}%`;
-          boxRef.current.style.width = `${width}%`;
-          boxRef.current.style.height = `${height}%`;
-        } else {
-          boxRef.current.style.display = "none";
-        }
-      } else if (boxRef.current) {
-        boxRef.current.style.display = "none";
       }
 
       // ---------------- بررسی ژست‌ها ----------------
       if (face.faceLandmarks?.length > 0) {
         const lm = face.faceLandmarks[0];
-
         const isMouthOpen = Math.abs(lm[13].y - lm[14].y) > 0.03;
         
-        // فقط اگر واقعا تغییر کرده آپدیت کن تا رندر الکی نگیریم
         setMouthOpen((prev) => prev !== isMouthOpen ? isMouthOpen : prev);
 
         if (hands.landmarks?.length > 0) {
@@ -208,6 +245,8 @@ function App() {
             setCameraOff(true);
             runningRef.current = false; 
             processingRef.current = false;
+            // پاک کردن کنواس بعد از خاموشی
+            if (canvasRef.current) canvasRef.current.getContext("2d").clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
             return; 
           }
 
@@ -258,121 +297,142 @@ function App() {
   };
 
   return (
-    <div 
-      className="container" 
-      style={{ 
-        width: "100vw",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "radial-gradient(circle at 50% 0%, #1e1b4b, #020617 80%)",
-        overflow: "hidden",
-        fontFamily: "system-ui, sans-serif",
-        padding: "20px",
-        boxSizing: "border-box"
-      }}
-    >
-      <div style={{
-        position: "relative",
-        width: "100%",
-        maxWidth: "1000px",
-        aspectRatio: "16/9",
-        backgroundColor: "#000",
-        borderRadius: "24px",
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
-        overflow: "hidden"
-      }}>
-        
-        {!cameraOff && (
-          <Webcam
-            ref={webcamRef}
-            mirrored
-            audio={false}
-            videoConstraints={videoConstraints} /* کانفیگ افزایش سرعت */
-            className="webcam"
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
-        )}
+    <>
+      {/* استایل سراسری برای ریست کردن اسکرول بار و بردر سفید دور مرورگر */}
+      <style>{`
+        body, html {
+          margin: 0;
+          padding: 0;
+          overflow: hidden;
+          background-color: #020617;
+        }
+        * {
+          box-sizing: border-box;
+        }
+      `}</style>
 
-        <div 
-          ref={boxRef}
-          style={{
-            position: "absolute",
-            display: "none",
-            border: "3px solid #38bdf8",
-            borderRadius: "12px",
-            boxShadow: "0 0 15px rgba(56, 189, 248, 0.4), inset 0 0 15px rgba(56, 189, 248, 0.4)",
-            zIndex: 30,
-            pointerEvents: "none",
-            transition: "left 0.05s linear, top 0.05s linear, width 0.05s linear, height 0.05s linear" // حرکت نرم و بهینه کادر
-          }}
-        />
+      <div 
+        className="container" 
+        style={{ 
+          width: "100vw",
+          height: "100vh", /* فیکس کامل صفحه */
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "radial-gradient(circle at 50% 0%, #1e1b4b, #020617 80%)",
+          fontFamily: "system-ui, sans-serif",
+          padding: "20px"
+        }}
+      >
+        <div style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: "1000px",
+          aspectRatio: "16/9",
+          backgroundColor: "#000",
+          borderRadius: "24px",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1)",
+          overflow: "hidden"
+        }}>
+          
+          {!cameraOff && (
+            <Webcam
+              ref={webcamRef}
+              mirrored
+              audio={false}
+              videoConstraints={videoConstraints} 
+              className="webcam"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                position: "absolute",
+                top: 0,
+                left: 0
+              }}
+            />
+          )}
 
-        {cameraOff && (
-          <div 
-            onClick={turnOnCamera}
-            style={{ 
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "rgba(15, 23, 42, 0.7)",
-              backdropFilter: "blur(12px)",
-              color: "#fca5a5",
-              fontSize: "clamp(18px, 4vw, 26px)",
-              fontWeight: "bold",
-              cursor: "pointer",
-              zIndex: 10,
-              textAlign: "center"
-            }}
-          >
-            Camera OFF 🚫 (Click to Turn ON)
-          </div>
-        )}
+          {/* Canvas برای کشیدن خطوط استخوان و نقاط و باکس. آیینه شده تا با وبکم هماهنگ باشد */}
+          {!cameraOff && (
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                zIndex: 20,
+                pointerEvents: "none", // تا کلیک‌ها را مسدود نکند
+                transform: "scaleX(-1)" // دقیقا مشابه خاصیت mirrored وبکم
+              }}
+            />
+          )}
 
-        {!cameraOff && (
-          <button
-            onClick={toggleBox}
-            style={{
-              position: "absolute",
-              top: "5%",
-              left: "5%",
-              zIndex: 60,
-              padding: "10px 16px",
-              borderRadius: "12px",
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: boxEnabled ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 0, 0, 0.5)",
-              color: boxEnabled ? "#38bdf8" : "#fff",
-              backdropFilter: "blur(8px)",
-              fontSize: "14px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}
-          >
-            <div style={{
-              width: "8px", height: "8px", borderRadius: "50%",
-              background: boxEnabled ? "#38bdf8" : "#94a3b8"
-            }}/>
-            {boxEnabled ? "Hide Box" : "Show Box"}
-          </button>
-        )}
+          {cameraOff && (
+            <div 
+              onClick={turnOnCamera}
+              style={{ 
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(15, 23, 42, 0.7)",
+                backdropFilter: "blur(12px)",
+                color: "#fca5a5",
+                fontSize: "clamp(18px, 4vw, 26px)",
+                fontWeight: "bold",
+                cursor: "pointer",
+                zIndex: 10,
+                textAlign: "center"
+              }}
+            >
+              Camera OFF 🚫 (Click to Turn ON)
+            </div>
+          )}
 
-        {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" style={imageStyle} />}
-        {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" style={imageStyle} />}
-        {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" style={imageStyle} />}
-        {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" style={imageStyle} />}
-        {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" style={imageStyle} />}
+          {!cameraOff && (
+            <button
+              onClick={toggleBox}
+              style={{
+                position: "absolute",
+                top: "5%",
+                left: "5%",
+                zIndex: 60,
+                padding: "10px 16px",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                background: boxEnabled ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 0, 0, 0.5)",
+                color: boxEnabled ? "#38bdf8" : "#fff",
+                backdropFilter: "blur(8px)",
+                fontSize: "14px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                transition: "all 0.2s"
+              }}
+            >
+              <div style={{
+                width: "10px", height: "10px", borderRadius: "50%",
+                background: boxEnabled ? "#38bdf8" : "#94a3b8",
+                boxShadow: boxEnabled ? "0 0 10px #38bdf8" : "none"
+              }}/>
+              {boxEnabled ? "Hide Scanner" : "Show Scanner"}
+            </button>
+          )}
+
+          {sonic && !cameraOff && <img src="/sonic.jpg" alt="sonic" style={imageStyle} />}
+          {emoji && !cameraOff && !sonic && <img src="/emoji.jpg" alt="emoji" style={imageStyle} />}
+          {mouse && !cameraOff && !sonic && !emoji && <img src="/mouse.jpg" alt="mouse" style={imageStyle} />}
+          {ronaldo && !cameraOff && !sonic && !emoji && !mouse && <img src="/ronaldo.jpg" alt="ronaldo" style={imageStyle} />}
+          {mouthOpen && !cameraOff && !sonic && !emoji && !mouse && !ronaldo && <img src="/cat.jpg" alt="cat" style={imageStyle} />}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
